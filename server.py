@@ -14,8 +14,8 @@ blocks = Blocks()
 def get_transaction():
     transaction = request.get_json()
     transactions.add(transaction)
-    blocks.create(transactions.get_all())
-    return {}
+    time = blocks.create(transactions.get_all())
+    return {'time': time}
 
 
 @app.route("/block/", methods=['GET', 'POST', 'PUT', 'DELETE'])

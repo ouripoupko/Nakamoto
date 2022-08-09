@@ -4,20 +4,16 @@ import uuid
 
 
 class DBBridge:
-    def __init__(self, logger):
-        self.connection = None
+    def __init__(self, logger, port, db_name):
+        self.connection = MongoClient(port=int(port))
+        self.db = self.connection[db_name]
         self.logger = logger
 
-    def connect(self, port):
-        self.connection = MongoClient(port=int(port))
-        return self
-
-    def disconnect(self):
+    def __del__(self):
         self.connection.close()
 
-    def get_root_collection(self):
-        db = self.connection['ibc']
-        return Collection(db, db['agents'])
+    def get_root_collection(self, collection):
+        return Collection(self.db, self.db[collection])
 
 
 class Collection:
@@ -48,7 +44,7 @@ class Collection:
         return self.collection.find_one({'_id': item}) is not None
 
     def __len__(self):
-        return self.collection.count()
+        return self.collection.estimated_document_count()
 
     def store(self, collection):
         for key in collection:

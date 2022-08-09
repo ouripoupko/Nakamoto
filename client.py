@@ -8,8 +8,8 @@ n = 20000
 for i in range(1):
     for index in range(n >> 0):
         server = choice(servers)
-        print(index, server)
-        requests.post(f'{server}transaction/', json={'data': f'transaction_{str(index).zfill(5)}'}).json()
+        reply = requests.post(f'{server}transaction/', json={'data': f'transaction_{str(index).zfill(5)}'}).json()
+        print(index, server, reply['time'])
     sleep(10)
 
 for server in servers:
