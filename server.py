@@ -2,19 +2,16 @@ import sys
 import logging
 from flask import Flask, request
 
-from transactions import Transactions
 from blocks import Blocks
 
 app = Flask(__name__)
-transactions = Transactions()
 blocks = Blocks()
 
 
 @app.route("/transaction/", methods=['GET', 'POST', 'PUT', 'DELETE'])
 def get_transaction():
     transaction = request.get_json()
-    transactions.add(transaction)
-    time = blocks.create(transactions.get_all())
+    time = blocks.create(transaction)
     return {'time': time}
 
 
@@ -31,7 +28,9 @@ def get_block():
 
 @app.route("/count/", methods=['GET', 'POST', 'PUT', 'DELETE'])
 def get_count():
-    return {'count': len(blocks.blocks) + len(blocks.archive), 'longest': blocks.get_chain_print()}
+    sys.stdout.flush()
+    blocks.wait()
+    return {'count': 'done'}
 
 
 if __name__ == '__main__':

@@ -14,10 +14,3 @@ for i in range(1):
 
 for server in servers:
     count = requests.get(f'{server}count/').json()['count']
-    while count < n:
-        print(count, server)
-        sleep(2)
-        count = requests.get(f'{server}count/').json()['count']
-
-for server in servers[0:1]:
-    print(server, requests.get(f'{server}count/').json()['longest'])

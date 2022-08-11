@@ -8,4 +8,6 @@ sleep 10
 
 python client.py
 
+sleep 10
+
 ps -ef | grep "server.py" | grep -v grep | awk '{print $2}' | xargs kill
