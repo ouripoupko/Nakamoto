@@ -52,13 +52,13 @@ class Blocks:
             stem_tx = {}
             for key in stem:
                 block = stem[key]
-                for tx_key in block['transactions']:
-                    stem_tx[tx_key] = block['transactions'][tx_key]
+                for tx in block['transactions']:
+                    stem_tx[tx['hash_code']] = tx
             for key in branches:
                 block = branches[key]
-                for tx_key in block['transactions']:
-                    if tx_key not in stem_tx:
-                        transactions[tx_key] = block['transactions'][tx_key]
+                for tx in block['transactions']:
+                    if tx['hash_code'] not in stem_tx:
+                        transactions[tx['hash_code']] = tx
                 self.archive[key] = block
                 del self.blocks[key]
 

@@ -15,7 +15,7 @@ cruncher = Cruncher(partners, blocks)
 @app.route("/transaction/", methods=['GET', 'POST', 'PUT', 'DELETE'])
 def get_transaction():
     transaction = request.get_json()
-    time = cruncher.add_transaction(transaction)
+    time = cruncher.add_transaction(transaction['data'])
     return {'time': time}
 
 
@@ -33,10 +33,8 @@ def get_block():
 
 @app.route("/count/", methods=['GET', 'POST', 'PUT', 'DELETE'])
 def get_count():
-    partners.wait()
-    cruncher.wait()
     sys.stdout.flush()
-    return {'count': 'done'}
+    return {'count': cruncher.count()}
 
 
 if __name__ == '__main__':
@@ -48,3 +46,7 @@ if __name__ == '__main__':
     logger = logging.getLogger('werkzeug')
     logger.setLevel(logging.ERROR)
     app.run(host='0.0.0.0', port=port, use_reloader=False)
+
+# defects to fix
+# 3- scrabble broadcasting to distribute payload
+# 4- add random processing power variant
