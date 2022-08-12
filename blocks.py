@@ -46,10 +46,12 @@ class Blocks:
         return chain, blocks
 
     def do_archive(self, transactions, tip):
+        transaction_pool = {}
+        to_delete = []
+        stem_tx = {}
         if tip in self.blocks:
             stem, branches = self.get_chain(tip)
             self.min_index = stem[tip]['index']
-            stem_tx = {}
             for key in stem:
                 block = stem[key]
                 for tx in block['transactions']:
@@ -58,12 +60,20 @@ class Blocks:
                 block = branches[key]
                 for tx in block['transactions']:
                     if tx['hash_code'] not in stem_tx:
-                        transactions[tx['hash_code']] = tx
+                        transaction_pool[tx['hash_code']] = tx
                 self.archive[key] = block
                 del self.blocks[key]
+        for key, tx in transactions.items():
+            if key in stem_tx:
+                to_delete.append(key)
+            else:
+                transaction_pool[key] = tx
+        return transaction_pool, to_delete
 
     def retrieve_from_archive(self, key):
+        keys = []
         while key in self.archive:
+            keys.append(key)
             block = self.archive[key].get_dict()
             self.blocks[key] = block
             if block['index'] <= self.min_index:
@@ -112,5 +122,4 @@ class Blocks:
                 break
             count += 1
             tip = block['header']['previous']
-        return count if block and block['owner'] == owner else None
-
+        return count if block and block['owner'] == owner else -1

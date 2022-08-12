@@ -48,10 +48,10 @@ class Cruncher:
 
     def prepare_block(self):
         key, value = self.blocks.choose_tip()
-        transaction_pool = {}
-        self.blocks.do_archive(transaction_pool, key)
+        transaction_pool, to_delete = self.blocks.do_archive(self.transactions, key)
+        for tx_key in to_delete:
+            del self.transactions[tx_key]
         self.transactions.update({k: v for k, v in transaction_pool.items() if v['owner'] == self.me})
-        transaction_pool.update(self.transactions)
         payload = sorted(transaction_pool.values(), key=lambda tx: tx['timestamp'])
         payload = payload if len(payload) <= 5 else payload[0:5]
         difficulty = self.calculate_difficulty(key)
@@ -83,7 +83,8 @@ class Cruncher:
 
     def calculate_difficulty(self, tip):
         my_last = self.blocks.find_my_previous(tip, owner=self.me)
-        return len(self.partners.partners) - my_last + 10 if my_last else 10
+        difficulty = len(self.partners.partners) - my_last - 30 if my_last >= 0 else 0
+        return difficulty if difficulty > 4 else 4
 
     def add_transaction(self, transaction):
         self.queue.put(('transaction', transaction))
