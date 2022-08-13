@@ -1,7 +1,9 @@
 
-for i in {5000..5099}
+python server.py 5000 {5000..5099} &
+
+for i in {5001..5099}
 do
-  python server.py $i {5000..5099} & #> output/output_$i &
+  python server.py $i {5000..5099} > output/output_$i &
 done
 
 sleep 10

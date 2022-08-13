@@ -1,29 +1,32 @@
 from random import choice
 from mongodb_storage import DBBridge
+from threading import Lock
 
 
 class Blocks:
     def __init__(self):
+        self.connection = None
         self.db = None
-        self.blocks = None
-        self.archive = None
+        self.blocks = {}
+        self.archive = {}
         self.pending = {}
-        self.min_index = 0
         self.max_index = 0
+        self.lock = Lock()
 
     def init_db(self, name):
-        self.db = DBBridge(None, 27017, f'Nakamoto_{name}')
-        self.blocks = self.db.get_root_collection('blocks')
-        self.archive = self.db.get_root_collection('archive')
+        self.connection = DBBridge(None, 27017, f'Nakamoto_{name}')
+        self.db = self.connection.get_root_collection('blocks')
 
     def get(self, hash_code):
-        block = self.blocks[hash_code].get_dict()
+        block = self.blocks.get(hash_code)
         if not block:
-            block = self.archive[hash_code].get_dict()
+            block = self.archive.get(hash_code)
+        if not block:
+            block = self.db[hash_code].get_dict()
         return block
 
     def get_longest(self):
-        longest = self.blocks.get('index', '==', self.max_index)
+        longest = {k: v for k, v in self.blocks.items() if v['index'] == self.max_index}
         return longest
 
     def choose_tip(self):
@@ -37,13 +40,12 @@ class Blocks:
 
     def get_chain(self, tip):
         chain = {}
-        blocks = self.blocks.get('index', '>', self.min_index-1)
-        while tip in blocks:
-            block = blocks[tip]
+        while tip in self.blocks:
+            block = self.blocks[tip]
             chain[tip] = block
-            del blocks[tip]
             tip = block['header']['previous']
-        return chain, blocks
+        branches = {k: v for k, v in self.blocks.items() if k not in chain}
+        return chain, branches
 
     def do_archive(self, transactions, tip):
         transaction_pool = {}
@@ -51,13 +53,10 @@ class Blocks:
         stem_tx = {}
         if tip in self.blocks:
             stem, branches = self.get_chain(tip)
-            self.min_index = stem[tip]['index']
-            for key in stem:
-                block = stem[key]
+            for key, block in stem.items():
                 for tx in block['transactions']:
                     stem_tx[tx['hash_code']] = tx
-            for key in branches:
-                block = branches[key]
+            for key, block in branches.items():
                 for tx in block['transactions']:
                     if tx['hash_code'] not in stem_tx:
                         transaction_pool[tx['hash_code']] = tx
@@ -71,27 +70,35 @@ class Blocks:
         return transaction_pool, to_delete
 
     def retrieve_from_archive(self, key):
-        keys = []
         while key in self.archive:
-            keys.append(key)
-            block = self.archive[key].get_dict()
+            block = self.archive[key]
+            if block['index'] <= self.max_index - 28:
+                print('******************************* I made a wrong assumption ******************************')
             self.blocks[key] = block
-            if block['index'] <= self.min_index:
-                self.min_index = block['index'] - 1
             del self.archive[key]
             key = self.blocks[key]['header']['previous']
 
+    def grow_tree(self, block):
+        with self.lock:
+            self.db[block['hash_code']] = block
+        index = block['index']
+        if index > self.max_index:
+            self.max_index = index
+            old = {k: v for k, v in self.blocks.items() if v['index'] < index-100}
+            for key in old:
+                del self.blocks[key]
+            old = {k: v for k, v in self.archive.items() if v['index'] < index-30}
+            for key in old:
+                del self.archive[key]
+
     def loop_pending(self):
         to_delete = []
-        for key in self.pending:
-            self.retrieve_from_archive(key)
-            if self.pending[key]['header']['previous'] in self.blocks:
-                self.blocks[key] = self.pending[key]
-                index = self.pending[key]['index']
-                if index > self.max_index:
-                    self.max_index = index
-                if index <= self.min_index:
-                    self.min_index = index - 1
+        for key, block in self.pending.items():
+            previous = block['header']['previous']
+            self.retrieve_from_archive(previous)
+            if previous in self.blocks:
+                self.blocks[key] = block
+                self.grow_tree(block)
                 to_delete.append(key)
         for key in to_delete:
             del self.pending[key]
@@ -102,10 +109,7 @@ class Blocks:
         self.retrieve_from_archive(previous)
         if not previous or previous in self.blocks:
             self.blocks[block['hash_code']] = block
-            if block['index'] > self.max_index:
-                self.max_index = block['index']
-            if block['index'] <= self.min_index:
-                self.min_index = block['index'] - 1
+            self.grow_tree(block)
             while self.pending and self.loop_pending():
                 continue
             previous = None
@@ -113,13 +117,28 @@ class Blocks:
             self.pending[block['hash_code']] = block
         return previous
 
-    def find_my_previous(self, tip, owner):
+    def find_my_previous(self, tip, owner, max_depth):
         count = 0
         block = None
-        while tip:
+        index = -1 if self.max_index <= max_depth else self.max_index - max_depth - 1
+        while tip and tip in self.blocks and max_depth:
             block = self.blocks[tip]
             if block['owner'] == owner:
                 break
             count += 1
             tip = block['header']['previous']
+            max_depth -= 1
         return count if block and block['owner'] == owner else -1
+
+    def print(self):
+        with self.lock:
+            keys = [key for key in self.db]
+            order = {k: i+3 for i, k in enumerate(keys)}
+            order[None] = 1
+            order['missing'] = 2
+            print('[', end='')
+            for key in self.db:
+                block = self.db[key]
+                prev = block['header']['previous']
+                print(f'[{order[key]}, {order[prev] if prev in order else order["missing"]}]; ', end='')
+            print('[1, 1]];')

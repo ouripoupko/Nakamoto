@@ -3,7 +3,7 @@ from time import sleep
 import requests
 
 servers = [f'http://localhost:{index}/' for index in range(5000, 5100)]
-n = 1000
+n = 2000
 
 for index in range(n):
     server = choice(servers)
@@ -13,9 +13,12 @@ for index in range(n):
 
 while True:
     count = 0
-    for server in servers:
-        count += requests.get(f'{server}count/').json()['count']
-    print('total count:', count)
+    res = [0]*len(servers)
+    for idx, server in enumerate(servers):
+        res[idx] = requests.get(f'{server}count/').json()['count']
+        count += res[idx]
+    sleep(4)
+    print(res)
     if count == 0:
         break
-    sleep(1)
+    sleep(10)

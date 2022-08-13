@@ -16,6 +16,8 @@ class Cruncher:
         self.me = None
         self.transactions = {}
         self.queue = Queue()
+        self.last_block = 0
+        self.last_mine = 0
 
     def set_me(self, address):
         self.me = address
@@ -24,17 +26,20 @@ class Cruncher:
 
     def run(self):
         while True:
-            order, data = self.queue.get()
-            if order == 'transaction':
-                transaction = {'timestamp': datetime.now().strftime('%Y%m%d%H%M%S%f'),
-                               'owner': self.me,
-                               'transaction': data}
-                transaction['hash_code'] = hashlib.sha256(str(transaction).encode('utf-8')).hexdigest()
-                self.transactions[transaction['hash_code']] = transaction
-            elif order == 'block':
-                self.process_block(data)
+            if (not self.queue.empty()) or (self.last_block-self.last_mine <= 70):
+                order, data = self.queue.get()
+                if order == 'transaction':
+                    transaction = {'timestamp': datetime.now().strftime('%Y%m%d%H%M%S%f'),
+                                   'owner': self.me,
+                                   'transaction': data}
+                    transaction['hash_code'] = hashlib.sha256(str(transaction).encode('utf-8')).hexdigest()
+                    self.transactions[transaction['hash_code']] = transaction
+                elif order == 'block':
+                    self.process_block(data)
+            if not self.queue.empty():
+                continue
             block = self.prepare_block()
-            if block['transactions']:
+            if self.transactions or (self.last_block-self.last_mine > 70):
                 self.try_to_crunch(block)
             self.queue.task_done()
 
@@ -42,6 +47,9 @@ class Cruncher:
         for tx in block['transactions']:
             if tx['hash_code'] in self.transactions:
                 del self.transactions[tx['hash_code']]
+        self.last_block = block['index']
+        if block['owner'] == self.me:
+            self.last_mine = block['index']
         missing = self.blocks.add_block(block)
         if missing:
             self.partners.request(missing, block['owner'])
@@ -68,23 +76,24 @@ class Cruncher:
     def try_to_crunch(self, block):
         found = False
         while True:
-            if not self.queue.empty():
-                break
             block['header']['nonce'] = randrange(1 << (block['difficulty'] + 32))
             block['hash_code'] = hashlib.sha256(str(block['header']).encode('utf-8')).hexdigest()
             if (block['difficulty']) <= 256 - int(block['hash_code'], 16).bit_length():
                 found = True
                 break
+            if not self.queue.empty():
+                break
             time.sleep(0.001)
         if found:
-            self.add_block(block)
+            self.process_block(block)
             print(self.me, block['index'], block['difficulty'])
             self.partners.broadcast(block)
 
     def calculate_difficulty(self, tip):
-        my_last = self.blocks.find_my_previous(tip, owner=self.me)
-        difficulty = len(self.partners.partners) - my_last - 30 if my_last >= 0 else 0
-        return difficulty if difficulty > 4 else 4
+        n = len(self.partners.partners)
+        my_last = self.blocks.find_my_previous(tip, self.me, n)
+        difficulty = n - my_last - 30 if my_last >= 0 else 0
+        return difficulty if difficulty > 12 else 12
 
     def add_transaction(self, transaction):
         self.queue.put(('transaction', transaction))
@@ -98,4 +107,5 @@ class Cruncher:
         self.queue.join()
 
     def count(self):
-        return self.queue.qsize() + len(self.transactions)
+        # self.blocks.print()
+        return len(self.transactions)
