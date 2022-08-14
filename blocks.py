@@ -128,7 +128,7 @@ class Blocks:
             count += 1
             tip = block['header']['previous']
             max_depth -= 1
-        return count if block and block['owner'] == owner else -1
+        return (count, block['difficulty']) if (block and block['owner'] == owner) else (-1, 0)
 
     def print(self):
         with self.lock:

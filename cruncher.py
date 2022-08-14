@@ -3,7 +3,7 @@ import sys
 from threading import Thread
 from queue import Queue
 from datetime import datetime
-from random import randrange
+from random import randrange, gauss
 import hashlib
 import time
 
@@ -18,6 +18,7 @@ class Cruncher:
         self.queue = Queue()
         self.last_block = 0
         self.last_mine = 0
+        self.attenuator = abs(gauss(0.002, 0.0006))
 
     def set_me(self, address):
         self.me = address
@@ -26,8 +27,10 @@ class Cruncher:
 
     def run(self):
         while True:
-            if (not self.queue.empty()) or (self.last_block-self.last_mine <= 70):
+            task_taken = False
+            if ((not self.transactions) and (self.last_mine == 0)) or (not self.queue.empty()):
                 order, data = self.queue.get()
+                task_taken = True
                 if order == 'transaction':
                     transaction = {'timestamp': datetime.now().strftime('%Y%m%d%H%M%S%f'),
                                    'owner': self.me,
@@ -37,11 +40,14 @@ class Cruncher:
                 elif order == 'block':
                     self.process_block(data)
             if not self.queue.empty():
+                if task_taken:
+                    self.queue.task_done()
                 continue
             block = self.prepare_block()
-            if self.transactions or (self.last_block-self.last_mine > 70):
+            if True:
                 self.try_to_crunch(block)
-            self.queue.task_done()
+            if task_taken:
+                self.queue.task_done()
 
     def process_block(self, block):
         for tx in block['transactions']:
@@ -78,12 +84,12 @@ class Cruncher:
         while True:
             block['header']['nonce'] = randrange(1 << (block['difficulty'] + 32))
             block['hash_code'] = hashlib.sha256(str(block['header']).encode('utf-8')).hexdigest()
+            time.sleep(self.attenuator)
             if (block['difficulty']) <= 256 - int(block['hash_code'], 16).bit_length():
                 found = True
                 break
             if not self.queue.empty():
                 break
-            time.sleep(0.001)
         if found:
             self.process_block(block)
             print(self.me, block['index'], block['difficulty'])
@@ -91,9 +97,9 @@ class Cruncher:
 
     def calculate_difficulty(self, tip):
         n = len(self.partners.partners)
-        my_last = self.blocks.find_my_previous(tip, self.me, n)
-        difficulty = n - my_last - 30 if my_last >= 0 else 0
-        return difficulty if difficulty > 12 else 12
+        my_last, prev_diff = self.blocks.find_my_previous(tip, self.me, n)
+        difficulty = n - my_last if my_last >= 0 else 0
+        return difficulty + prev_diff - 10 if difficulty > 10 else 10
 
     def add_transaction(self, transaction):
         self.queue.put(('transaction', transaction))
